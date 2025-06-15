@@ -2,7 +2,7 @@ package main
 
 // TODO:
 // 1. Add more detail to files with command line flags for varying levels of detail
-// 2. Ability to delete selected files
+// 2. Add delete confirmation in a nice text-box
 // 3. Ability to create new files/dirs
 // 4. Ability to copy/paste selected files
 // 5. Search/Filter list of files
@@ -198,19 +198,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newOpts := m.opts
 			newOpts.dir = absPath
 			return initialModel(newOpts), nil
-			// case "d":
-			// 	// Delete file
-			// 	fileToDelete, err := filepath.Abs(m.displayNames[m.cursor])
-			// 	if err != nil {
-			// 		fmt.Println("Error resolving parent path:", err)
-			// 		return m, nil
-			// 	}
-			// 	err = os.Remove(fileToDelete)
-			// 	if err != nil {
-			// 		fmt.Println("Error deleting:", err)
-			// 		return m, tea.Quit
-			// 	}
-			// 	slices.Delete(m.displayNames, m.cursor, m.cursor+1)
+
+		case "d":
+			// Delete file
+			fileToDelete, err := filepath.Abs(m.displayNames[m.cursor])
+			if err != nil {
+				fmt.Println("Error resolving parent path:", err)
+				return m, nil
+			}
+			err = os.Remove(fileToDelete)
+			if err != nil {
+				fmt.Println("Error deleting:", err)
+				return m, tea.Quit
+			}
+			newModel := initialModel(m.opts)
+			newModel.cursor = m.cursor
+			return newModel, nil
 		}
 	}
 	// Return the updated model to the Bubble Tea runtime for processing.
