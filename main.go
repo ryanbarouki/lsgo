@@ -253,20 +253,16 @@ func main() {
 	// TODO: add command line arg to toggle perimissions
 	// TODO: Add nice icons for different file types
 
-	absPath, err := filepath.Abs(".")
+	startPath := "."
+	if len(args) > 1 {
+		startPath = args[1]
+	}
+	absPath, err := filepath.Abs(startPath)
 	if err != nil {
 		fmt.Println("Invalid path:", err)
 		os.Exit(1)
 	}
-	opts := Opts{absPath}
-	if len(args) > 1 {
-		absPath, err := filepath.Abs(args[1])
-		if err != nil {
-			fmt.Println("Invalid path:", err)
-			os.Exit(1)
-		}
-		opts.dir = absPath
-	}
+	opts := Opts{dir: absPath}
 	p := tea.NewProgram(initialModel(opts))
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
