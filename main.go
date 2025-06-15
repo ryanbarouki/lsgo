@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	//"slices"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -169,11 +170,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "r":
 			// Rename file or folder
-			var cmd tea.Cmd
 			m.renaming = m.cursor
 			m.currEdit.Placeholder = m.displayNames[m.cursor]
 			m.currEdit.Focus()
-			return m, cmd
+			return m, nil
 
 		case "enter":
 			if m.fileInfo[m.cursor].IsDir() {
@@ -198,6 +198,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newOpts := m.opts
 			newOpts.dir = absPath
 			return initialModel(newOpts), nil
+			// case "d":
+			// 	// Delete file
+			// 	fileToDelete, err := filepath.Abs(m.displayNames[m.cursor])
+			// 	if err != nil {
+			// 		fmt.Println("Error resolving parent path:", err)
+			// 		return m, nil
+			// 	}
+			// 	err = os.Remove(fileToDelete)
+			// 	if err != nil {
+			// 		fmt.Println("Error deleting:", err)
+			// 		return m, tea.Quit
+			// 	}
+			// 	slices.Delete(m.displayNames, m.cursor, m.cursor+1)
 		}
 	}
 	// Return the updated model to the Bubble Tea runtime for processing.
