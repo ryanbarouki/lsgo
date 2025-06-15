@@ -11,11 +11,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	//"slices"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"lsgo/utils"
 )
 
 type Styles struct {
@@ -241,10 +241,12 @@ func (m model) View() string {
 			checked = m.styles.checkedStyle.Render("\uf42e")
 		}
 
+		icon := utils.IconFor(m.fileInfo[i])
+
 		permissions := m.fileInfo[i].Mode().Perm().String()
 		// Render the row
 		if i == m.renaming {
-			s += fmt.Sprintf(" %s %s %s %s\n", cursor, permissions, checked, m.currEdit.View())
+			s += fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, m.currEdit.View())
 		} else {
 			if m.fileInfo[i].IsDir() {
 				filename += "/"
@@ -253,7 +255,7 @@ func (m model) View() string {
 				filename = m.styles.highlightedStyle.Render(filename)
 				permissions = m.styles.highlightedStyle.Render(permissions)
 			}
-			s += fmt.Sprintf(" %s %s %s %s\n", cursor, permissions, checked, filename)
+			s += fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, filename)
 		}
 	}
 
