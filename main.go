@@ -4,8 +4,8 @@ package main
 // 1. Add more detail to files with command line flags for varying levels of detail
 // 2. Ability to delete selected files
 // 3. Ability to create new files/dirs
-// 4. Ability to move through directories
-// 5. Ability to copy/paste selected files
+// 4. Ability to copy/paste selected files
+// 5. Search/Filter list of files
 
 import (
 	"fmt"
@@ -25,7 +25,7 @@ type Styles struct {
 }
 
 type model struct {
-	files        []os.DirEntry // items on the to-do list
+	fileInfo     []os.FileInfo // items on the to-do list
 	displayNames []string
 	cursor       int              // which to-do list item our cursor is pointing at
 	selected     map[int]struct{} // which to-do items are selected
@@ -50,11 +50,14 @@ func initialModel(opts Opts) model {
 		return model{}
 	}
 	fnames := make([]string, 0, len(entries))
-	// fullFnames := make([]string, 0, len(entries))
+	fileInfo := make([]os.FileInfo, 0, len(entries))
 	for _, file := range entries {
+		info, err := file.Info()
+		if err != nil {
+			continue
+		}
 		fnames = append(fnames, file.Name())
-		// fullFnames = append(fullFnames, opts.dir+"/"+file.Name())
-		// fmt.Println(opts.dir + "/" + file.Name())
+		fileInfo = append(fileInfo, info)
 	}
 	styles := Styles{
 		renamingStyle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")),
@@ -68,7 +71,7 @@ func initialModel(opts Opts) model {
 	ti.TextStyle = styles.renamingStyle
 	ti.Prompt = ""
 	return model{
-		files:        entries,
+		fileInfo:     fileInfo,
 		displayNames: fnames,
 		selected:     make(map[int]struct{}),
 		currEdit:     ti,
@@ -95,12 +98,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.renaming = -1
 					return m, nil
 				}
-				err := os.Rename(m.files[m.cursor].Name(), newName)
+				oldFullPath, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
+
+				if err != nil {
+					fmt.Println("Invalid path:", err)
+					os.Exit(1)
+				}
+
+				newFullPath, err := filepath.Abs(filepath.Join(m.opts.dir, newName))
+
+				if err != nil {
+					fmt.Println("Invalid path:", err)
+					os.Exit(1)
+				}
+
+				err = os.Rename(oldFullPath, newFullPath)
 				if err != nil {
 					fmt.Println("Rename failed:", err)
 					return m, tea.Quit
 				}
 				m.displayNames[m.cursor] = newName
+				// NOTE: New name isn't updated in fileinfo unless one moves directory
+				// consider changing this
+				// currently displayNames may differ
 				m.renaming = -1
 				m.currEdit.Reset()
 
@@ -133,7 +153,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// The "down" and "j" keys move the cursor down
 		case "down", "j":
-			if m.cursor < len(m.files)-1 {
+			if m.cursor < len(m.fileInfo)-1 {
 				m.cursor++
 			}
 
@@ -156,8 +176,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 
 		case "enter":
-			if m.files[m.cursor].IsDir() {
-				newPath := filepath.Join(m.opts.dir, m.files[m.cursor].Name())
+			if m.fileInfo[m.cursor].IsDir() {
+				newPath := filepath.Join(m.opts.dir, m.displayNames[m.cursor])
 				absPath, err := filepath.Abs(newPath)
 				if err != nil {
 					fmt.Println("Error resolving path:", err)
@@ -205,18 +225,19 @@ func (m model) View() string {
 			checked = m.styles.checkedStyle.Render("\uf42e")
 		}
 
+		permissions := m.fileInfo[i].Mode().Perm().String()
 		// Render the row
 		if i == m.renaming {
-			s += fmt.Sprintf(" %s %s %s\n", cursor, checked, m.currEdit.View())
+			s += fmt.Sprintf(" %s %s %s %s\n", cursor, permissions, checked, m.currEdit.View())
 		} else {
-			if i == m.cursor {
-				filename = m.styles.highlightedStyle.Render(filename)
-			}
-			fileType := m.files[i].Type()
-			if fileType.IsDir() {
+			if m.fileInfo[i].IsDir() {
 				filename += "/"
 			}
-			s += fmt.Sprintf(" %s %s %s\n", cursor, checked, filename)
+			if i == m.cursor {
+				filename = m.styles.highlightedStyle.Render(filename)
+				permissions = m.styles.highlightedStyle.Render(permissions)
+			}
+			s += fmt.Sprintf(" %s %s %s %s\n", cursor, permissions, checked, filename)
 		}
 	}
 
@@ -229,7 +250,15 @@ func (m model) View() string {
 
 func main() {
 	args := os.Args
-	opts := Opts{"."}
+	// TODO: add command line arg to toggle perimissions
+	// TODO: Add nice icons for different file types
+
+	absPath, err := filepath.Abs(".")
+	if err != nil {
+		fmt.Println("Invalid path:", err)
+		os.Exit(1)
+	}
+	opts := Opts{absPath}
 	if len(args) > 1 {
 		absPath, err := filepath.Abs(args[1])
 		if err != nil {
