@@ -8,6 +8,7 @@ package main
 // 5. Search/Filter list of files
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -41,7 +42,8 @@ func isHidden(file os.DirEntry) bool {
 }
 
 type Opts struct {
-	dir string
+	dir       string
+	showPerms bool
 }
 
 func initialModel(opts Opts) model {
@@ -243,7 +245,11 @@ func (m model) View() string {
 
 		icon := utils.IconFor(m.fileInfo[i])
 
-		permissions := m.fileInfo[i].Mode().Perm().String()
+		permissions := ""
+		if m.opts.showPerms {
+			permissions = m.fileInfo[i].Mode().Perm().String()
+		}
+
 		// Render the row
 		if i == m.renaming {
 			s += fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, m.currEdit.View())
@@ -267,20 +273,27 @@ func (m model) View() string {
 }
 
 func main() {
-	args := os.Args
-	// TODO: add command line arg to toggle perimissions
-	// TODO: Add nice icons for different file types
+	showPerms := flag.Bool("a", false, "Show file permissions")
+	flag.Parse()
+
+	args := flag.Args()
 
 	startPath := "."
-	if len(args) > 1 {
-		startPath = args[1]
+	if len(args) > 0 {
+		startPath = args[0]
 	}
+
 	absPath, err := filepath.Abs(startPath)
 	if err != nil {
 		fmt.Println("Invalid path:", err)
 		os.Exit(1)
 	}
-	opts := Opts{dir: absPath}
+
+	opts := Opts{
+		dir:       absPath,
+		showPerms: *showPerms,
+	}
+
 	p := tea.NewProgram(initialModel(opts))
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
