@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,12 +25,14 @@ type Styles struct {
 }
 
 type model struct {
-	fnames   []string         // items on the to-do list
-	cursor   int              // which to-do list item our cursor is pointing at
-	selected map[int]struct{} // which to-do items are selected
-	currEdit textinput.Model
-	renaming int
-	styles   Styles
+	files        []os.DirEntry // items on the to-do list
+	displayNames []string
+	cursor       int              // which to-do list item our cursor is pointing at
+	selected     map[int]struct{} // which to-do items are selected
+	currEdit     textinput.Model
+	renaming     int
+	styles       Styles
+	opts         Opts
 }
 
 func isHidden(file os.DirEntry) bool {
@@ -42,7 +45,6 @@ type Opts struct {
 
 func initialModel(opts Opts) model {
 	entries, err := os.ReadDir(opts.dir)
-	os.Chdir(opts.dir)
 	if err != nil {
 		fmt.Println("Error reading directory:", err)
 		return model{}
@@ -66,11 +68,13 @@ func initialModel(opts Opts) model {
 	ti.TextStyle = styles.renamingStyle
 	ti.Prompt = ""
 	return model{
-		fnames:   fnames,
-		selected: make(map[int]struct{}),
-		currEdit: ti,
-		renaming: -1,
-		styles:   styles,
+		files:        entries,
+		displayNames: fnames,
+		selected:     make(map[int]struct{}),
+		currEdit:     ti,
+		renaming:     -1,
+		styles:       styles,
+		opts:         opts,
 	}
 }
 
@@ -91,12 +95,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.renaming = -1
 					return m, nil
 				}
-				err := os.Rename(m.fnames[m.cursor], newName)
+				err := os.Rename(m.files[m.cursor].Name(), newName)
 				if err != nil {
 					fmt.Println("Rename failed:", err)
 					return m, tea.Quit
 				}
-				m.fnames[m.cursor] = newName
+				m.displayNames[m.cursor] = newName
 				m.renaming = -1
 				m.currEdit.Reset()
 
@@ -129,13 +133,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// The "down" and "j" keys move the cursor down
 		case "down", "j":
-			if m.cursor < len(m.fnames)-1 {
+			if m.cursor < len(m.files)-1 {
 				m.cursor++
 			}
 
 		// The "enter" key and the spacebar (a literal space) toggle
 		// the selected state for the item that the cursor is pointing at.
-		case " ", "enter":
+		case " ":
 			_, ok := m.selected[m.cursor]
 			if ok {
 				delete(m.selected, m.cursor)
@@ -147,9 +151,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Rename file or folder
 			var cmd tea.Cmd
 			m.renaming = m.cursor
-			m.currEdit.Placeholder = m.fnames[m.cursor]
+			m.currEdit.Placeholder = m.displayNames[m.cursor]
 			m.currEdit.Focus()
 			return m, cmd
+
+		case "enter":
+			if m.files[m.cursor].IsDir() {
+				newPath := filepath.Join(m.opts.dir, m.files[m.cursor].Name())
+				absPath, err := filepath.Abs(newPath)
+				if err != nil {
+					fmt.Println("Error resolving path:", err)
+					return m, nil
+				}
+				newOpts := m.opts
+				newOpts.dir = absPath
+				return initialModel(newOpts), nil
+			}
+
+		case "backspace":
+			parent := filepath.Dir(m.opts.dir)
+			absPath, err := filepath.Abs(parent)
+			if err != nil {
+				fmt.Println("Error resolving parent path:", err)
+				return m, nil
+			}
+			newOpts := m.opts
+			newOpts.dir = absPath
+			return initialModel(newOpts), nil
 		}
 	}
 	// Return the updated model to the Bubble Tea runtime for processing.
@@ -163,7 +191,7 @@ func (m model) View() string {
 	s := "\n"
 
 	// Iterate over our choices
-	for i, filename := range m.fnames {
+	for i, filename := range m.displayNames {
 
 		// Is the cursor pointing at this choice?
 		cursor := " " // no cursor
@@ -184,6 +212,10 @@ func (m model) View() string {
 			if i == m.cursor {
 				filename = m.styles.highlightedStyle.Render(filename)
 			}
+			fileType := m.files[i].Type()
+			if fileType.IsDir() {
+				filename += "/"
+			}
 			s += fmt.Sprintf(" %s %s %s\n", cursor, checked, filename)
 		}
 	}
@@ -199,7 +231,12 @@ func main() {
 	args := os.Args
 	opts := Opts{"."}
 	if len(args) > 1 {
-		opts.dir = args[1]
+		absPath, err := filepath.Abs(args[1])
+		if err != nil {
+			fmt.Println("Invalid path:", err)
+			os.Exit(1)
+		}
+		opts.dir = absPath
 	}
 	p := tea.NewProgram(initialModel(opts))
 	if _, err := p.Run(); err != nil {
