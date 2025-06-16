@@ -1,11 +1,10 @@
 package main
 
 // TODO:
-// 1. Add more detail to files with command line flags for varying levels of detail
-// 2. Add delete confirmation in a nice text-box
-// 3. Ability to create new files/dirs
-// 4. Ability to copy/paste selected files
-// 5. Search/Filter list of files
+// 1. Add delete confirmation in a nice text-box
+// 2. Ability to create new files/dirs
+// 3. Ability to copy/paste selected files
+// 4. Search/Filter list of files
 
 import (
 	"flag"
@@ -259,7 +258,11 @@ func (m model) View() string {
 
 		// Render the row
 		if i == m.renaming {
-			s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, m.currEdit.View()))
+			if m.opts.showPerms {
+				s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, m.currEdit.View()))
+			} else {
+				s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, m.currEdit.View()))
+			}
 		} else {
 			if m.fileInfo[i].IsDir() {
 				filename += "/"
@@ -268,7 +271,11 @@ func (m model) View() string {
 				filename = m.styles.highlightedStyle.Render(filename)
 				permissions = m.styles.highlightedStyle.Render(permissions)
 			}
-			s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, filename))
+			if m.opts.showPerms {
+				s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, filename))
+			} else {
+				s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, filename))
+			}
 		}
 	}
 
