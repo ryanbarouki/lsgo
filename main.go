@@ -42,8 +42,9 @@ func isHidden(file os.DirEntry) bool {
 }
 
 type Opts struct {
-	dir       string
-	showPerms bool
+	dir             string
+	showPerms       bool
+	showHiddenFiles bool
 }
 
 func initialModel(opts Opts) model {
@@ -57,6 +58,9 @@ func initialModel(opts Opts) model {
 	for _, file := range entries {
 		info, err := file.Info()
 		if err != nil {
+			continue
+		}
+		if !opts.showHiddenFiles && isHidden(file) {
 			continue
 		}
 		fnames = append(fnames, file.Name())
@@ -273,8 +277,15 @@ func (m model) View() string {
 }
 
 func main() {
-	showPerms := flag.Bool("a", false, "Show file permissions")
+	showPerms := flag.Bool("l", false, "Show file permissions")
+	showHiddenFiles := flag.Bool("a", false, "Show hidden files")
+	showHiddenAndPerms := flag.Bool("la", false, "Show hidden files and all permissions")
 	flag.Parse()
+
+	if *showHiddenAndPerms {
+		*showPerms = true
+		*showHiddenFiles = true
+	}
 
 	args := flag.Args()
 
@@ -290,8 +301,9 @@ func main() {
 	}
 
 	opts := Opts{
-		dir:       absPath,
-		showPerms: *showPerms,
+		dir:             absPath,
+		showPerms:       *showPerms,
+		showHiddenFiles: *showHiddenFiles,
 	}
 
 	p := tea.NewProgram(initialModel(opts))
