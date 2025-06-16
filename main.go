@@ -25,6 +25,7 @@ type Styles struct {
 	highlightedStyle lipgloss.Style
 	cursorStyle      lipgloss.Style
 	checkedStyle     lipgloss.Style
+	confirmDelStyle  lipgloss.Style
 }
 
 type model struct {
@@ -36,6 +37,7 @@ type model struct {
 	renaming     int
 	styles       Styles
 	opts         Opts
+	confirmDel   bool
 }
 
 func isHidden(file os.DirEntry) bool {
@@ -72,6 +74,7 @@ func initialModel(opts Opts) model {
 		highlightedStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("#d8b172")).Bold(true),
 		checkedStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")),
 		cursorStyle:      lipgloss.NewStyle().Foreground(lipgloss.Color("#d8b172")),
+		confirmDelStyle:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff0000")),
 	}
 	ti := textinput.New()
 	ti.CharLimit = 156
@@ -95,6 +98,31 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.confirmDel {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "y":
+				fileToDelete, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
+				if err != nil {
+					fmt.Println("Error resolving parent path:", err)
+					return m, nil
+				}
+				err = os.Remove(fileToDelete)
+				if err != nil {
+					fmt.Println("Error deleting:", err)
+					return m, tea.Quit
+				}
+				newModel := initialModel(m.opts)
+				newModel.cursor = m.cursor
+				return newModel, nil
+			case "n":
+				m.confirmDel = false
+				return m, nil
+			}
+		}
+		return m, nil
+	}
 	if m.renaming != -1 {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -208,19 +236,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "d":
 			// Delete file
-			fileToDelete, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
-			if err != nil {
-				fmt.Println("Error resolving parent path:", err)
-				return m, nil
-			}
-			err = os.Remove(fileToDelete)
-			if err != nil {
-				fmt.Println("Error deleting:", err)
-				return m, tea.Quit
-			}
-			newModel := initialModel(m.opts)
-			newModel.cursor = m.cursor
-			return newModel, nil
+			m.confirmDel = true
+			return m, nil
 		}
 	}
 	// Return the updated model to the Bubble Tea runtime for processing.
@@ -262,6 +279,24 @@ func (m model) View() string {
 				s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, m.currEdit.View()))
 			} else {
 				s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, m.currEdit.View()))
+			}
+		} else if m.confirmDel {
+			if i == m.cursor {
+				message := m.styles.confirmDelStyle.Render("Confirm delete (y/n)")
+				if m.opts.showPerms {
+					s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, message))
+				} else {
+					s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, message))
+				}
+			} else {
+				if m.fileInfo[i].IsDir() {
+					filename += "/"
+				}
+				if m.opts.showPerms {
+					s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, filename))
+				} else {
+					s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, filename))
+				}
 			}
 		} else {
 			if m.fileInfo[i].IsDir() {
