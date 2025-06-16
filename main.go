@@ -208,7 +208,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "d":
 			// Delete file
-			fileToDelete, err := filepath.Abs(m.displayNames[m.cursor])
+			fileToDelete, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
 			if err != nil {
 				fmt.Println("Error resolving parent path:", err)
 				return m, nil
