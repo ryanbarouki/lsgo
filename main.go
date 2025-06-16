@@ -1,7 +1,7 @@
 package main
 
 // TODO:
-// 1. Add delete confirmation in a nice text-box
+// 1. Refactor this mess
 // 2. Ability to create new files/dirs
 // 3. Ability to copy/paste selected files
 // 4. Search/Filter list of files
@@ -50,11 +50,11 @@ type Opts struct {
 	showHiddenFiles bool
 }
 
-func initialModel(opts Opts) model {
+func initialModel(opts Opts) *model {
 	entries, err := os.ReadDir(opts.dir)
 	if err != nil {
 		fmt.Println("Error reading directory:", err)
-		return model{}
+		return &model{}
 	}
 	fnames := make([]string, 0, len(entries))
 	fileInfo := make([]os.FileInfo, 0, len(entries))
@@ -81,7 +81,7 @@ func initialModel(opts Opts) model {
 	ti.Width = 20
 	ti.TextStyle = styles.renamingStyle
 	ti.Prompt = ""
-	return model{
+	return &model{
 		fileInfo:     fileInfo,
 		displayNames: fnames,
 		selected:     make(map[int]struct{}),
@@ -92,12 +92,12 @@ func initialModel(opts Opts) model {
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m *model) Init() tea.Cmd {
 	// Just return `nil`, which means "no I/O right now, please."
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.confirmDel {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -245,7 +245,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+func (m *model) View() string {
 	// The header
 	//s := "LSGO\n\n"
 	var s strings.Builder
