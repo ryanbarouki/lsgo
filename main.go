@@ -12,11 +12,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"lsgo/utils"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"lsgo/utils"
 )
 
 type Styles struct {
@@ -230,7 +232,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	// The header
 	//s := "LSGO\n\n"
-	s := "\n"
+	var s strings.Builder
+	s.WriteString("\n")
 
 	// Iterate over our choices
 	for i, filename := range m.displayNames {
@@ -256,7 +259,7 @@ func (m model) View() string {
 
 		// Render the row
 		if i == m.renaming {
-			s += fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, m.currEdit.View())
+			s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, m.currEdit.View()))
 		} else {
 			if m.fileInfo[i].IsDir() {
 				filename += "/"
@@ -265,15 +268,15 @@ func (m model) View() string {
 				filename = m.styles.highlightedStyle.Render(filename)
 				permissions = m.styles.highlightedStyle.Render(permissions)
 			}
-			s += fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, filename)
+			s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, filename))
 		}
 	}
 
 	// The footer
-	s += "\nPress q to quit.\n"
+	s.WriteString("\nPress q to quit.\n")
 
 	// Send the UI for rendering
-	return s
+	return s.String()
 }
 
 func main() {
