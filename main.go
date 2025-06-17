@@ -20,6 +20,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+type Mode int
+
+const (
+	NormalMode Mode = iota
+	RenameMode
+	DeleteMode
+	AddMode
+)
+
 type Styles struct {
 	renamingStyle    lipgloss.Style
 	highlightedStyle lipgloss.Style
@@ -37,7 +46,7 @@ type model struct {
 	renaming     int
 	styles       Styles
 	opts         Opts
-	confirmDel   bool
+	mode         Mode
 }
 
 func isHidden(file os.DirEntry) bool {
@@ -89,6 +98,7 @@ func initialModel(opts Opts) *model {
 		renaming:     -1,
 		styles:       styles,
 		opts:         opts,
+		mode:         NormalMode,
 	}
 }
 
@@ -97,151 +107,165 @@ func (m *model) Init() tea.Cmd {
 	return nil
 }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.confirmDel {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "y":
-				fileToDelete, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
-				if err != nil {
-					fmt.Println("Error resolving parent path:", err)
-					return m, nil
-				}
-				err = os.Remove(fileToDelete)
-				if err != nil {
-					fmt.Println("Error deleting:", err)
-					return m, tea.Quit
-				}
-				newModel := initialModel(m.opts)
-				newModel.cursor = m.cursor
-				return newModel, nil
-			case "n":
-				m.confirmDel = false
-				return m, nil
-			}
-		}
+func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
 		return m, nil
 	}
-	if m.renaming != -1 {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
+	switch key.String() {
+	// These keys should exit the program.
+	case "ctrl+c", "q":
+		return m, tea.Quit
 
-			case "enter":
-				newName := m.currEdit.Value()
-				if newName == "" {
-					m.renaming = -1
-					return m, nil
-				}
-				oldFullPath, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
-
-				if err != nil {
-					fmt.Println("Invalid path:", err)
-					os.Exit(1)
-				}
-
-				newFullPath, err := filepath.Abs(filepath.Join(m.opts.dir, newName))
-
-				if err != nil {
-					fmt.Println("Invalid path:", err)
-					os.Exit(1)
-				}
-
-				err = os.Rename(oldFullPath, newFullPath)
-				if err != nil {
-					fmt.Println("Rename failed:", err)
-					return m, tea.Quit
-				}
-				m.displayNames[m.cursor] = newName
-				// NOTE: New name isn't updated in fileinfo unless one moves directory
-				// consider changing this
-				// currently displayNames may differ
-				m.renaming = -1
-				m.currEdit.Reset()
-
-			default:
-				var cmd tea.Cmd
-				m.currEdit, cmd = m.currEdit.Update(msg)
-				return m, cmd
-			}
+	// The "up" and "k" keys move the cursor up
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
 		}
+
+	// The "down" and "j" keys move the cursor down
+	case "down", "j":
+		if m.cursor < len(m.fileInfo)-1 {
+			m.cursor++
+		}
+
+	// The "enter" key and the spacebar (a literal space) toggle
+	// the selected state for the item that the cursor is pointing at.
+	case " ":
+		_, ok := m.selected[m.cursor]
+		if ok {
+			delete(m.selected, m.cursor)
+		} else {
+			m.selected[m.cursor] = struct{}{}
+		}
+
+	case "r":
+		// Rename file or folder
+		m.renaming = m.cursor
+		m.mode = RenameMode
+		m.currEdit.Placeholder = m.displayNames[m.cursor]
+		m.currEdit.Focus()
 		return m, nil
-	}
 
-	switch msg := msg.(type) {
-
-	// Is it a key press?
-	case tea.KeyMsg:
-
-		// Cool, what was the actual key pressed?
-		switch msg.String() {
-
-		// These keys should exit the program.
-		case "ctrl+c", "q":
-			return m, tea.Quit
-
-		// The "up" and "k" keys move the cursor up
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-
-		// The "down" and "j" keys move the cursor down
-		case "down", "j":
-			if m.cursor < len(m.fileInfo)-1 {
-				m.cursor++
-			}
-
-		// The "enter" key and the spacebar (a literal space) toggle
-		// the selected state for the item that the cursor is pointing at.
-		case " ":
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
-			} else {
-				m.selected[m.cursor] = struct{}{}
-			}
-
-		case "r":
-			// Rename file or folder
-			m.renaming = m.cursor
-			m.currEdit.Placeholder = m.displayNames[m.cursor]
-			m.currEdit.Focus()
-			return m, nil
-
-		case "enter":
-			if m.fileInfo[m.cursor].IsDir() {
-				newPath := filepath.Join(m.opts.dir, m.displayNames[m.cursor])
-				absPath, err := filepath.Abs(newPath)
-				if err != nil {
-					fmt.Println("Error resolving path:", err)
-					return m, nil
-				}
-				newOpts := m.opts
-				newOpts.dir = absPath
-				return initialModel(newOpts), nil
-			}
-
-		case "backspace":
-			parent := filepath.Dir(m.opts.dir)
-			absPath, err := filepath.Abs(parent)
+	case "enter":
+		if m.fileInfo[m.cursor].IsDir() {
+			newPath := filepath.Join(m.opts.dir, m.displayNames[m.cursor])
+			absPath, err := filepath.Abs(newPath)
 			if err != nil {
-				fmt.Println("Error resolving parent path:", err)
+				fmt.Println("Error resolving path:", err)
 				return m, nil
 			}
 			newOpts := m.opts
 			newOpts.dir = absPath
 			return initialModel(newOpts), nil
+		}
 
-		case "d":
-			// Delete file
-			m.confirmDel = true
+	case "backspace":
+		parent := filepath.Dir(m.opts.dir)
+		absPath, err := filepath.Abs(parent)
+		if err != nil {
+			fmt.Println("Error resolving parent path:", err)
 			return m, nil
 		}
+		newOpts := m.opts
+		newOpts.dir = absPath
+		return initialModel(newOpts), nil
+
+	case "d":
+		// Delete file
+		m.mode = DeleteMode
+		return m, nil
 	}
-	// Return the updated model to the Bubble Tea runtime for processing.
-	// Note that we're not returning a command.
+	return m, nil
+}
+
+func (m *model) updateRename(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch key.String() {
+	case "enter":
+		newName := m.currEdit.Value()
+		if newName == "" {
+			m.renaming = -1
+			m.mode = NormalMode
+			return m, nil
+		}
+		oldFullPath, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
+
+		if err != nil {
+			fmt.Println("Invalid path:", err)
+			os.Exit(1)
+		}
+
+		newFullPath, err := filepath.Abs(filepath.Join(m.opts.dir, newName))
+
+		if err != nil {
+			fmt.Println("Invalid path:", err)
+			os.Exit(1)
+		}
+
+		err = os.Rename(oldFullPath, newFullPath)
+		if err != nil {
+			fmt.Println("Rename failed:", err)
+			return m, tea.Quit
+		}
+		m.displayNames[m.cursor] = newName
+		// NOTE: New name isn't updated in fileinfo unless one moves directory
+		// consider changing this
+		// currently displayNames may differ
+		m.renaming = -1
+		m.mode = NormalMode
+		m.currEdit.Reset()
+
+	default:
+		var cmd tea.Cmd
+		m.currEdit, cmd = m.currEdit.Update(msg)
+		return m, cmd
+
+	}
+	return m, nil
+}
+
+func (m *model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	switch key.String() {
+	case "y":
+		fileToDelete, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
+		if err != nil {
+			fmt.Println("Error resolving parent path:", err)
+			return m, nil
+		}
+		err = os.Remove(fileToDelete)
+		if err != nil {
+			fmt.Println("Error deleting:", err)
+			return m, tea.Quit
+		}
+		newModel := initialModel(m.opts)
+		newModel.cursor = m.cursor
+		return newModel, nil
+	case "n":
+		m.mode = NormalMode
+		return m, nil
+
+	}
+	return m, nil
+}
+
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch m.mode {
+	case NormalMode:
+		return m.updateNormal(msg)
+	case RenameMode:
+		return m.updateRename(msg)
+	case DeleteMode:
+		return m.updateDelete(msg)
+	}
 	return m, nil
 }
 
@@ -280,7 +304,7 @@ func (m *model) View() string {
 			} else {
 				s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, m.currEdit.View()))
 			}
-		} else if m.confirmDel {
+		} else if m.mode == DeleteMode {
 			if i == m.cursor {
 				message := m.styles.confirmDelStyle.Render("Confirm delete (y/n)")
 				if m.opts.showPerms {
