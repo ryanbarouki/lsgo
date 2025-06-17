@@ -63,7 +63,8 @@ func initialModel(opts Opts) *model {
 	entries, err := os.ReadDir(opts.dir)
 	if err != nil {
 		fmt.Println("Error reading directory:", err)
-		return &model{}
+		os.Exit(1)
+		return nil
 	}
 	fnames := make([]string, 0, len(entries))
 	fileInfo := make([]os.FileInfo, 0, len(entries))
@@ -149,11 +150,9 @@ func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		if m.fileInfo[m.cursor].IsDir() {
-			newPath := filepath.Join(m.opts.dir, m.displayNames[m.cursor])
-			absPath, err := filepath.Abs(newPath)
+			absPath, err := m.absPath(m.displayNames[m.cursor])
 			if err != nil {
-				fmt.Println("Error resolving path:", err)
-				return m, nil
+				return m, fatal(err)
 			}
 			newOpts := m.opts
 			newOpts.dir = absPath
@@ -161,12 +160,11 @@ func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case "backspace":
-		parent := filepath.Dir(m.opts.dir)
-		absPath, err := filepath.Abs(parent)
+		absPath, err := filepath.Abs(filepath.Dir(m.opts.dir))
 		if err != nil {
-			fmt.Println("Error resolving parent path:", err)
-			return m, nil
+			return m, fatal(err)
 		}
+
 		newOpts := m.opts
 		newOpts.dir = absPath
 		return initialModel(newOpts), nil
@@ -177,6 +175,15 @@ func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+func (m *model) absPath(filename string) (string, error) {
+	return filepath.Abs(filepath.Join(m.opts.dir, filename))
+}
+
+func fatal(err error) tea.Cmd {
+	fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+	return tea.Quit
 }
 
 func (m *model) updateRename(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -192,25 +199,21 @@ func (m *model) updateRename(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = NormalMode
 			return m, nil
 		}
-		oldFullPath, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
-
+		oldFullPath, err := m.absPath(m.displayNames[m.cursor])
 		if err != nil {
-			fmt.Println("Invalid path:", err)
-			os.Exit(1)
+			return m, fatal(err)
 		}
 
-		newFullPath, err := filepath.Abs(filepath.Join(m.opts.dir, newName))
-
+		newFullPath, err := m.absPath(newName)
 		if err != nil {
-			fmt.Println("Invalid path:", err)
-			os.Exit(1)
+			return m, fatal(err)
 		}
 
-		err = os.Rename(oldFullPath, newFullPath)
-		if err != nil {
-			fmt.Println("Rename failed:", err)
-			return m, tea.Quit
+		if err := os.Rename(oldFullPath, newFullPath); err != nil {
+			// TODO: Make this a recoverable error
+			return m, fatal(err)
 		}
+
 		m.displayNames[m.cursor] = newName
 		// NOTE: New name isn't updated in fileinfo unless one moves directory
 		// consider changing this
@@ -236,17 +239,17 @@ func (m *model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch key.String() {
 	case "y":
-		fileToDelete, err := filepath.Abs(filepath.Join(m.opts.dir, m.displayNames[m.cursor]))
+		fileToDelete, err := m.absPath(m.displayNames[m.cursor])
 		if err != nil {
-			fmt.Println("Error resolving parent path:", err)
-			return m, nil
+			return m, fatal(err)
 		}
-		err = os.Remove(fileToDelete)
-		if err != nil {
-			fmt.Println("Error deleting:", err)
-			return m, tea.Quit
+
+		if err = os.Remove(fileToDelete); err != nil {
+			return m, fatal(err)
 		}
+
 		newModel := initialModel(m.opts)
+		// TODO: cursor may end up out of bounds when deleting last element
 		newModel.cursor = m.cursor
 		return newModel, nil
 	case "n":
