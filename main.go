@@ -1,7 +1,7 @@
 package main
 
 // TODO:
-// 1. Refactor this mess
+// 1. Refactor View and initalModel
 // 2. Ability to create new files/dirs
 // 3. Ability to copy/paste selected files
 // 4. Search/Filter list of files
@@ -272,79 +272,66 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) rowBuilder(i int, s *strings.Builder) {
+
+	// Is the cursor pointing at this choice?
+	cursor := " " // no cursor
+	if m.cursor == i {
+		cursor = m.styles.cursorStyle.Render("→")
+	}
+
+	s.WriteString(fmt.Sprintf(" %s", cursor))
+
+	if m.opts.showPerms {
+		permissions := m.fileInfo[i].Mode().Perm().String()
+		if m.cursor == i {
+			permissions = m.styles.highlightedStyle.Render(permissions)
+		}
+		s.WriteString(fmt.Sprintf(" %s", permissions))
+	}
+
+	// Is this choice selected?
+	checked := " " // not selected
+	if _, ok := m.selected[i]; ok {
+		checked = m.styles.checkedStyle.Render("\uf42e")
+	}
+
+	icon := utils.IconFor(m.fileInfo[i])
+
+	s.WriteString(fmt.Sprintf(" %s %s", checked, icon))
+
+	filename := m.displayNames[i]
+	if m.fileInfo[i].IsDir() {
+		filename += "/"
+	}
+
+	if i != m.cursor {
+		s.WriteString(fmt.Sprintf(" %s", filename))
+		return
+	}
+
+	switch m.mode {
+	case NormalMode:
+		filename = m.styles.highlightedStyle.Render(filename)
+		s.WriteString(fmt.Sprintf(" %s", filename))
+	case RenameMode:
+		s.WriteString(fmt.Sprintf(" %s", m.currEdit.View()))
+	case DeleteMode:
+		message := m.styles.confirmDelStyle.Render("Confirm delete (y/n)")
+		s.WriteString(fmt.Sprintf(" %s", message))
+	}
+}
+
 func (m *model) View() string {
-	// The header
-	//s := "LSGO\n\n"
 	var s strings.Builder
 	s.WriteString("\n")
 
-	// Iterate over our choices
-	for i, filename := range m.displayNames {
-
-		// Is the cursor pointing at this choice?
-		cursor := " " // no cursor
-		if m.cursor == i {
-			cursor = m.styles.cursorStyle.Render("→")
-		}
-
-		// Is this choice selected?
-		checked := " " // not selected
-		if _, ok := m.selected[i]; ok {
-			checked = m.styles.checkedStyle.Render("\uf42e")
-		}
-
-		icon := utils.IconFor(m.fileInfo[i])
-
-		permissions := ""
-		if m.opts.showPerms {
-			permissions = m.fileInfo[i].Mode().Perm().String()
-		}
-
-		// Render the row
-		if i == m.renaming {
-			if m.opts.showPerms {
-				s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, m.currEdit.View()))
-			} else {
-				s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, m.currEdit.View()))
-			}
-		} else if m.mode == DeleteMode {
-			if i == m.cursor {
-				message := m.styles.confirmDelStyle.Render("Confirm delete (y/n)")
-				if m.opts.showPerms {
-					s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, message))
-				} else {
-					s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, message))
-				}
-			} else {
-				if m.fileInfo[i].IsDir() {
-					filename += "/"
-				}
-				if m.opts.showPerms {
-					s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, filename))
-				} else {
-					s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, filename))
-				}
-			}
-		} else {
-			if m.fileInfo[i].IsDir() {
-				filename += "/"
-			}
-			if i == m.cursor {
-				filename = m.styles.highlightedStyle.Render(filename)
-				permissions = m.styles.highlightedStyle.Render(permissions)
-			}
-			if m.opts.showPerms {
-				s.WriteString(fmt.Sprintf(" %s %s %s %s %s\n", cursor, permissions, checked, icon, filename))
-			} else {
-				s.WriteString(fmt.Sprintf(" %s %s %s %s\n", cursor, checked, icon, filename))
-			}
-		}
+	for i, _ := range m.displayNames {
+		m.rowBuilder(i, &s)
+		s.WriteString("\n")
 	}
 
-	// The footer
 	s.WriteString("\nPress q to quit.\n")
-
-	// Send the UI for rendering
 	return s.String()
 }
 
