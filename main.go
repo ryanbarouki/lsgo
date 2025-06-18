@@ -1,7 +1,7 @@
 package main
 
 // TODO:
-// 1. Refactor View and initalModel
+// 1. Refactor initalModel
 // 2. Ability to create new files/dirs
 // 3. Ability to copy/paste selected files
 // 4. Search/Filter list of files
@@ -91,6 +91,7 @@ func initialModel(opts Opts) *model {
 	ti.Width = 20
 	ti.TextStyle = styles.renamingStyle
 	ti.Prompt = ""
+
 	return &model{
 		fileInfo:     fileInfo,
 		displayNames: fnames,
@@ -101,6 +102,15 @@ func initialModel(opts Opts) *model {
 		opts:         opts,
 		mode:         NormalMode,
 	}
+}
+
+func (m *model) absPath(filename string) (string, error) {
+	return filepath.Abs(filepath.Join(m.opts.dir, filename))
+}
+
+func fatal(err error) tea.Cmd {
+	fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+	return tea.Quit
 }
 
 func (m *model) Init() tea.Cmd {
@@ -173,17 +183,46 @@ func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Delete file
 		m.mode = DeleteMode
 		return m, nil
+
+	case "a":
+		m.mode = AddMode
+		m.currEdit.Placeholder = "Create a new file"
+		m.currEdit.Focus()
+		return m, nil
 	}
 	return m, nil
 }
 
-func (m *model) absPath(filename string) (string, error) {
-	return filepath.Abs(filepath.Join(m.opts.dir, filename))
-}
+func (m *model) updateAdd(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch key.String() {
+	case "enter":
+		newFile := m.currEdit.Value()
+		if newFile == "" {
+			m.mode = NormalMode
+			return m, nil
+		}
 
-func fatal(err error) tea.Cmd {
-	fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
-	return tea.Quit
+		newFullPath, err := m.absPath(newFile)
+		if err != nil {
+			return m, fatal(err)
+		}
+		//os.Mkdir()
+		if _, err := os.Create(newFullPath); err != nil {
+			// TODO: Make this a recoverable error
+			return m, fatal(err)
+		}
+
+		return initialModel(m.opts), nil
+
+	default:
+		var cmd tea.Cmd
+		m.currEdit, cmd = m.currEdit.Update(msg)
+		return m, cmd
+	}
 }
 
 func (m *model) updateRename(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -268,6 +307,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateRename(msg)
 	case DeleteMode:
 		return m.updateDelete(msg)
+	case AddMode:
+		return m.updateAdd(msg)
 	}
 	return m, nil
 }
@@ -322,12 +363,35 @@ func (m *model) rowBuilder(i int, s *strings.Builder) {
 	}
 }
 
+func (m *model) addFileView(s *strings.Builder) {
+	cursor := m.styles.cursorStyle.Render("→")
+	s.WriteString(fmt.Sprintf(" %s", cursor))
+	if m.opts.showPerms {
+		var mode os.FileMode = 0644
+		permissions := mode.Perm().String()
+		permissions = m.styles.highlightedStyle.Render(permissions)
+		s.WriteString(fmt.Sprintf(" %s", permissions))
+	}
+	checked := " " // not selected
+	icon := "📄"
+	s.WriteString(fmt.Sprintf(" %s %s %s", checked, icon, m.currEdit.View()))
+}
+
 func (m *model) View() string {
 	var s strings.Builder
 	s.WriteString("\n")
 
+	if m.mode == AddMode {
+		m.cursor = len(m.displayNames)
+	}
+
 	for i, _ := range m.displayNames {
 		m.rowBuilder(i, &s)
+		s.WriteString("\n")
+	}
+
+	if m.mode == AddMode {
+		m.addFileView(&s)
 		s.WriteString("\n")
 	}
 
