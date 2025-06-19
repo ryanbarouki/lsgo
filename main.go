@@ -93,6 +93,7 @@ func (m *model) resetModel(opts Opts) {
 	m.opts = opts
 	m.cursor = 0
 	m.currEdit.Reset()
+	m.selected = make(map[int]struct{})
 }
 
 func loadFileInfo(entries []os.DirEntry, opts Opts) ([]string, []os.FileInfo) {
