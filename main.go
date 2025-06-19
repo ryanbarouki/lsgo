@@ -1,9 +1,9 @@
 package main
 
 // TODO:
-// 1. Refactor initalModel and use resetModel instead
-// 2. Ability to copy/paste selected files
-// 3. Search/Filter list of files
+// Features:
+// 1. Ability to copy/paste selected files
+// 2. Search/Filter list of files
 
 import (
 	"flag"
@@ -90,6 +90,9 @@ func (m *model) resetModel(opts Opts) {
 	m.displayNames = fnames
 	m.renaming = -1
 	m.mode = NormalMode
+	m.opts = opts
+	m.cursor = 0
+	m.currEdit.Reset()
 }
 
 func loadFileInfo(entries []os.DirEntry, opts Opts) ([]string, []os.FileInfo) {
@@ -171,9 +174,10 @@ func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			newOpts := m.opts
 			newOpts.dir = absPath
-			newModel := initialModel(newOpts)
-			newModel.prevCursor = m.cursor
-			return newModel, nil
+			prevCursor := m.cursor
+			m.resetModel(newOpts)
+			m.prevCursor = prevCursor
+			return m, nil
 		}
 
 	case "backspace":
@@ -184,9 +188,9 @@ func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		newOpts := m.opts
 		newOpts.dir = absPath
-		newModel := initialModel(newOpts)
-		newModel.cursor = m.prevCursor
-		return newModel, nil
+		m.resetModel(newOpts)
+		m.cursor = m.prevCursor
+		return m, nil
 
 	case "d":
 		// Delete file
@@ -225,7 +229,10 @@ func (m *model) updateAdd(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, fatal(err)
 		}
 
-		return initialModel(m.opts), nil
+		// TODO: Not a fan of the resetting here
+		// keep the new files at the bottom of the list
+		m.resetModel(m.opts)
+		return m, nil
 
 	default:
 		var cmd tea.Cmd
@@ -296,10 +303,11 @@ func (m *model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, fatal(err)
 		}
 
-		newModel := initialModel(m.opts)
+		savedCursor := m.cursor
+		m.resetModel(m.opts)
 		// TODO: cursor may end up out of bounds when deleting last element
-		newModel.cursor = m.cursor
-		return newModel, nil
+		m.cursor = savedCursor
+		return m, nil
 	case "n":
 		m.mode = NormalMode
 		return m, nil
