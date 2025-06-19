@@ -1,10 +1,9 @@
 package main
 
 // TODO:
-// 1. Refactor initalModel
-// 2. Ability to create new files/dirs
-// 3. Ability to copy/paste selected files
-// 4. Search/Filter list of files
+// 1. Refactor initalModel and use resetModel instead
+// 2. Ability to copy/paste selected files
+// 3. Search/Filter list of files
 
 import (
 	"flag"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type Mode int
@@ -29,18 +27,11 @@ const (
 	AddMode
 )
 
-type Styles struct {
-	renamingStyle    lipgloss.Style
-	highlightedStyle lipgloss.Style
-	cursorStyle      lipgloss.Style
-	checkedStyle     lipgloss.Style
-	confirmDelStyle  lipgloss.Style
-}
-
 type model struct {
 	fileInfo     []os.FileInfo // items on the to-do list
 	displayNames []string
-	cursor       int              // which to-do list item our cursor is pointing at
+	cursor       int // which to-do list item our cursor is pointing at
+	prevCursor   int
 	selected     map[int]struct{} // which to-do items are selected
 	currEdit     textinput.Model
 	renaming     int
@@ -66,26 +57,8 @@ func initialModel(opts Opts) *model {
 		os.Exit(1)
 		return nil
 	}
-	fnames := make([]string, 0, len(entries))
-	fileInfo := make([]os.FileInfo, 0, len(entries))
-	for _, file := range entries {
-		info, err := file.Info()
-		if err != nil {
-			continue
-		}
-		if !opts.showHiddenFiles && isHidden(file) {
-			continue
-		}
-		fnames = append(fnames, file.Name())
-		fileInfo = append(fileInfo, info)
-	}
-	styles := Styles{
-		renamingStyle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")),
-		highlightedStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("#d8b172")).Bold(true),
-		checkedStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")),
-		cursorStyle:      lipgloss.NewStyle().Foreground(lipgloss.Color("#d8b172")),
-		confirmDelStyle:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff0000")),
-	}
+	fnames, fileInfo := loadFileInfo(entries, opts)
+	styles := InitStyles()
 	ti := textinput.New()
 	ti.CharLimit = 156
 	ti.Width = 20
@@ -102,6 +75,38 @@ func initialModel(opts Opts) *model {
 		opts:         opts,
 		mode:         NormalMode,
 	}
+}
+
+func (m *model) resetModel(opts Opts) {
+	entries, err := os.ReadDir(opts.dir)
+	if err != nil {
+		fmt.Println("Error reading directory:", err)
+		os.Exit(1)
+	}
+
+	fnames, fileInfo := loadFileInfo(entries, opts)
+
+	m.fileInfo = fileInfo
+	m.displayNames = fnames
+	m.renaming = -1
+	m.mode = NormalMode
+}
+
+func loadFileInfo(entries []os.DirEntry, opts Opts) ([]string, []os.FileInfo) {
+	fnames := make([]string, 0, len(entries))
+	fileInfo := make([]os.FileInfo, 0, len(entries))
+	for _, file := range entries {
+		info, err := file.Info()
+		if err != nil {
+			continue
+		}
+		if !opts.showHiddenFiles && isHidden(file) {
+			continue
+		}
+		fnames = append(fnames, file.Name())
+		fileInfo = append(fileInfo, info)
+	}
+	return fnames, fileInfo
 }
 
 func (m *model) absPath(filename string) (string, error) {
@@ -166,7 +171,9 @@ func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			newOpts := m.opts
 			newOpts.dir = absPath
-			return initialModel(newOpts), nil
+			newModel := initialModel(newOpts)
+			newModel.prevCursor = m.cursor
+			return newModel, nil
 		}
 
 	case "backspace":
@@ -177,7 +184,9 @@ func (m *model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		newOpts := m.opts
 		newOpts.dir = absPath
-		return initialModel(newOpts), nil
+		newModel := initialModel(newOpts)
+		newModel.cursor = m.prevCursor
+		return newModel, nil
 
 	case "d":
 		// Delete file
