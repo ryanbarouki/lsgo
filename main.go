@@ -413,7 +413,20 @@ func (m *model) View() string {
 		s.WriteString("\n")
 	}
 
-	s.WriteString("\nPress q to quit.\n")
+	styled := m.styles.keyStyle.Render
+
+	instructions := fmt.Sprintf(
+		"%s Navigate   %s Select   %s Open   %s Rename   %s Delete   %s Add   %s Quit\n",
+		styled("[j/k]"),
+		styled("[Space]"),
+		styled("[Enter]"),
+		styled("[r]"),
+		styled("[d]"),
+		styled("[a]"),
+		styled("[q]"),
+	)
+
+	s.WriteString("\n" + instructions)
 	return s.String()
 }
 

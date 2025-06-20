@@ -6,6 +6,7 @@ import (
 
 type Styles struct {
 	renamingStyle    lipgloss.Style
+	keyStyle         lipgloss.Style
 	highlightedStyle lipgloss.Style
 	cursorStyle      lipgloss.Style
 	checkedStyle     lipgloss.Style
@@ -15,6 +16,7 @@ type Styles struct {
 func InitStyles() Styles {
 	return Styles{
 		renamingStyle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")),
+		keyStyle:         lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")),
 		highlightedStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("#d8b172")).Bold(true),
 		checkedStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")),
 		cursorStyle:      lipgloss.NewStyle().Foreground(lipgloss.Color("#d8b172")),
