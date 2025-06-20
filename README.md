@@ -2,6 +2,9 @@
 Just a toy project to get familiar with GO.
 
 Pronounced "les gooooo!"
+## Demo
+
+![lsgo_demo](https://github.com/user-attachments/assets/be757948-a8f3-4133-b0a4-b93765e0a67b)
 
 ## Features
 - Keyboard navigation through files and directories
