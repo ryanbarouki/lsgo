@@ -271,6 +271,7 @@ func (m *model) updateRename(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// NOTE: New name isn't updated in fileinfo unless one moves directory
 		// consider changing this
 		// currently displayNames may differ
+		// TODO: Should have same behaviour as adding files
 		m.renaming = -1
 		m.mode = NormalMode
 		m.currEdit.Reset()
