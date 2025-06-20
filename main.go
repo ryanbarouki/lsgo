@@ -284,6 +284,13 @@ func (m *model) updateRename(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) boundedCursor(cursor int) int {
+	if cursor >= len(m.displayNames) {
+		return len(m.displayNames) - 1
+	}
+	return cursor
+}
+
 func (m *model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -303,8 +310,7 @@ func (m *model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		savedCursor := m.cursor
 		m.resetModel(m.opts)
-		// TODO: cursor may end up out of bounds when deleting last element
-		m.cursor = savedCursor
+		m.cursor = m.boundedCursor(savedCursor)
 		return m, nil
 	case "n":
 		m.mode = NormalMode
