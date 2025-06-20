@@ -6,6 +6,15 @@ import (
 	"strings"
 )
 
+func IndexOf(slice []string, val string) int {
+	for i, v := range slice {
+		if v == val {
+			return i
+		}
+	}
+	return -1 // Not found
+}
+
 func IconFor(file os.FileInfo) string {
 	name := file.Name()
 	if file.IsDir() {

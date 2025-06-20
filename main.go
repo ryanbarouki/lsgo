@@ -51,13 +51,7 @@ type Opts struct {
 }
 
 func initialModel(opts Opts) *model {
-	entries, err := os.ReadDir(opts.dir)
-	if err != nil {
-		fmt.Println("Error reading directory:", err)
-		os.Exit(1)
-		return nil
-	}
-	fnames, fileInfo := loadFileInfo(entries, opts)
+	fnames, fileInfo := loadFileInfo(opts)
 	styles := InitStyles()
 	ti := textinput.New()
 	ti.CharLimit = 156
@@ -78,13 +72,8 @@ func initialModel(opts Opts) *model {
 }
 
 func (m *model) resetModel(opts Opts) {
-	entries, err := os.ReadDir(opts.dir)
-	if err != nil {
-		fmt.Println("Error reading directory:", err)
-		os.Exit(1)
-	}
 
-	fnames, fileInfo := loadFileInfo(entries, opts)
+	fnames, fileInfo := loadFileInfo(opts)
 
 	m.fileInfo = fileInfo
 	m.displayNames = fnames
@@ -96,7 +85,14 @@ func (m *model) resetModel(opts Opts) {
 	m.selected = make(map[int]struct{})
 }
 
-func loadFileInfo(entries []os.DirEntry, opts Opts) ([]string, []os.FileInfo) {
+func loadFileInfo(opts Opts) ([]string, []os.FileInfo) {
+
+	entries, err := os.ReadDir(opts.dir)
+	if err != nil {
+		fmt.Println("Error reading directory:", err)
+		os.Exit(1)
+	}
+
 	fnames := make([]string, 0, len(entries))
 	fileInfo := make([]os.FileInfo, 0, len(entries))
 	for _, file := range entries {
@@ -230,9 +226,10 @@ func (m *model) updateAdd(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, fatal(err)
 		}
 
-		// TODO: Not a fan of the resetting here
-		// keep the new files at the bottom of the list
-		m.resetModel(m.opts)
+		m.displayNames, m.fileInfo = loadFileInfo(m.opts)
+		m.mode = NormalMode
+		m.currEdit.Reset()
+		m.cursor = utils.IndexOf(m.displayNames, newFile)
 		return m, nil
 
 	default:
